@@ -1,0 +1,10 @@
+node_modules/
+lib/
+coverage/
+.artifacts/
+.routinekit/
+*.tgz
+.DS_Store
+.env
+.env.*
+!.env.example
