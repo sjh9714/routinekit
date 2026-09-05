@@ -86,3 +86,11 @@ test('capture expires without status polling and late results cannot revive it',
   assert.equal(recorder.status().state, 'idle');
   assert.throws(() => recorder.draft(), { code: 'RECORDING' });
 });
+
+test('named schemas can be validated repeatedly without retaining a stale contract', () => {
+  const schema = { $id: 'https://example.com/routinekit-test-schema', type: 'string' };
+  validateSchema(schema, 'first');
+  validateSchema(schema, 'second');
+  assert.throws(() => validateSchema({ ...schema, type: 'number' }, 'not-a-number'), { code: 'CONTRACT' });
+  validateSchema({ ...schema, type: 'number' }, 42);
+});

@@ -74,6 +74,7 @@ function compileSchema(schema) {
   noRefs(copy);
   let validate;
   try { validate = ajv.compile(copy); } catch { fail('UNSUPPORTED_SCHEMA', 'This tool schema cannot be validated.'); }
+  finally { if (copy && typeof copy === 'object') ajv.removeSchema(copy); }
   return validate;
 }
 export function validateSchema(schema, value, code = 'CONTRACT') {
