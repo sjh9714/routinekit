@@ -8,13 +8,17 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { ElicitRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { createMCPServer } from '../src/mcp.mjs';
 import { RoutineService } from '../src/service.mjs';
+import { TOOL_SPECS } from '../src/tools.mjs';
 
 test('real MCP protocol exposes tools and fails closed without human elicitation', async () => {
   const root = await mkdtemp(join(tmpdir(),'routinekit-mcp-test-')); const service = new RoutineService({root}); const server = createMCPServer(service);
   const client = new Client({name:'test-client',version:'1.0'}); const [a,b] = InMemoryTransport.createLinkedPair();
   try {
     await Promise.all([server.connect(a),client.connect(b)]);
-    const listed = await client.listTools(); assert.equal(listed.tools.length,12);
+    const listed = await client.listTools(); assert.equal(listed.tools.length, TOOL_SPECS.length + 1);
+    const appTool = listed.tools.find(t => t.name === 'routine_workbench');
+    const resource = await client.readResource({ uri: appTool._meta.ui.resourceUri });
+    assert.match(resource.contents[0].text, /My routines/); assert.equal(resource.contents[0].mimeType, 'text/html;profile=mcp-app');
     const result = await client.callTool({name:'routine_web_open',arguments:{url:'http://127.0.0.1:9'}}); assert.equal(result.isError,true); assert.match(result.content[0].text,/ELICITATION_REQUIRED/); assert.equal(service.browser.page,undefined);
   } finally { await client.close(); await server.close(); await service.close(); await rm(root,{recursive:true}); }
 });

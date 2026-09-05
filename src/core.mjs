@@ -64,7 +64,7 @@ function compileSchema(schema) {
   function noRefs(node) {
     if (!node || typeof node !== 'object') return;
     if (Array.isArray(node)) { node.forEach(noRefs); return; }
-    if ('$ref' in node || '$dynamicRef' in node || '$recursiveRef' in node || 'pattern' in node || 'patternProperties' in node || 'format' in node) fail('UNSUPPORTED_SCHEMA', 'Referenced, regex, and format schemas are not supported in v0.1.');
+    if ('$ref' in node || '$dynamicRef' in node || '$recursiveRef' in node || 'pattern' in node || 'patternProperties' in node || 'format' in node) fail('UNSUPPORTED_SCHEMA', 'Referenced, regex, and format schemas are not supported.');
     for (const [key, child] of Object.entries(node)) {
       if (['properties', '$defs', 'definitions', 'dependencies', 'dependentSchemas'].includes(key) && child && typeof child === 'object') Object.values(child).forEach(noRefs);
       else if (['allOf','anyOf','oneOf','prefixItems'].includes(key) && Array.isArray(child)) child.forEach(noRefs);
@@ -85,6 +85,10 @@ export function toolContract(tool) {
   if (!tool || typeof tool.name !== 'string' || !tool.name || tool.name.length > 200) fail('TOOL', 'Invalid tool identity.');
   const contract = { name: tool.name, inputSchema: jsonCopy(tool.inputSchema), effect: tool.effect === 'read' ? 'read' : 'unknown' };
   if (tool.outputSchema) contract.outputSchema = jsonCopy(tool.outputSchema);
+  if (tool.source) {
+    if (Object.keys(tool.source).some(k => !['server','name','version'].includes(k)) || ['server','name','version'].some(k => typeof tool.source[k] !== 'string' || !tool.source[k] || tool.source[k].length > 200)) fail('MCP_SOURCE', 'Invalid MCP server identity.');
+    contract.source = jsonCopy(tool.source);
+  }
   if (tool.origin) {
     const url = new URL(tool.origin);
     if (!['http:', 'https:'].includes(url.protocol) || url.origin !== tool.origin) fail('ORIGIN', 'An exact HTTP(S) origin is required.');
@@ -227,7 +231,8 @@ export class Recorder {
 export function validateRoutine(value) {
   const r = jsonCopy(value); assertNoSecrets(r);
   const only = (object, keys) => { if (Object.keys(object).some(k => !keys.includes(k))) fail('FORMAT', 'Unexpected routine field.'); };
-  only(r, ['format','name','inputs','steps']);
+  only(r, ['format','name','inputs','steps','expose']);
+  if (r.expose !== undefined && typeof r.expose !== 'boolean') fail('FORMAT', 'expose must be an explicit boolean.');
   if (r.format !== 'routinekit/v1' || !/^[a-z][a-z0-9-]{1,63}$/.test(r.name)) fail('FORMAT', 'Unsupported routine format or invalid name.');
   if (!r.inputs || r.inputs.type !== 'object' || r.inputs.additionalProperties !== false || !r.inputs.properties || !Array.isArray(r.inputs.required)) fail('INPUT', 'Routine must declare exact named inputs.');
   for (const key of Object.keys(r.inputs.properties)) if (!/^[a-z][a-z0-9_]{0,47}$/.test(key) || !['string','number','boolean'].includes(r.inputs.properties[key]?.type)) fail('INPUT', 'Invalid scalar input declaration.');
@@ -239,7 +244,7 @@ export function validateRoutine(value) {
     only(step, ['id','tool','contract','contractHash','arguments','bindings','expect','checks']);
     if (!/^step_[1-9][0-9]*$/.test(step.id) || seen.has(step.id)) fail('STEP', 'Invalid or duplicate step id.');
     if (step.tool !== step.contract?.name || fingerprint(toolContract(step.contract)) !== step.contractHash) fail('CONTRACT', 'Invalid contract fingerprint.');
-    only(step.contract, ['name','inputSchema','outputSchema','origin','effect']);
+    only(step.contract, ['name','inputSchema','outputSchema','origin','effect','source']);
     compileSchema(step.contract.inputSchema);
     if (step.contract.outputSchema) compileSchema(step.contract.outputSchema);
     if (!Array.isArray(step.bindings) || step.bindings.length > 1000) fail('BINDINGS', 'Invalid bindings.');

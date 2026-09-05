@@ -1,0 +1,29 @@
+name: Publish MCP Registry
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Verify exact npm release exists with matching identity
+        run: node scripts/verify-registry.mjs
+      - name: Download and verify pinned official publisher
+        run: |
+          curl --fail --location --output publisher.tar.gz https://github.com/modelcontextprotocol/registry/releases/download/v1.8.1/mcp-publisher_linux_amd64.tar.gz
+          echo 'a06c9096dcb9727c13555b6be26c7effa707b01f06a4c561ba7a3635443cf2cc  publisher.tar.gz' | sha256sum --check
+          tar -xzf publisher.tar.gz mcp-publisher
+      - name: Publish using this repository's GitHub OIDC identity
+        run: |
+          ./mcp-publisher login github-oidc
+          ./mcp-publisher publish

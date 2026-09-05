@@ -1,19 +1,67 @@
 {
   "name": "routinekit",
-  "version": "0.1.0",
+  "version": "0.2.0",
+  "mcpName": "io.github.sjh9714/routinekit",
   "description": "Turn successful agent tool calls into reviewed, parameterized routines you can actually replay. DSH, MCP, and WebMCP.",
   "type": "module",
   "license": "MIT",
-  "engines": { "node": ">=22.19.0" },
-  "bin": { "routinekit": "bin/cli.mjs" },
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "bin": {
+    "routinekit": "bin/cli.mjs"
+  },
   "main": "src/dsh.mjs",
-  "exports": { ".": "./src/dsh.mjs", "./core": "./src/core.mjs", "./client": "./lib/client.js", "./package.json": "./package.json" },
-  "files": ["src", "bin", "lib", "web", "examples", "cordis.patch.yml", "README.md", "LICENSE"],
-  "repository": { "type": "git", "url": "git+https://github.com/sjh9714/routinekit.git" },
+  "exports": {
+    ".": "./src/dsh.mjs",
+    "./core": "./src/core.mjs",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src",
+    "bin",
+    "lib",
+    "web",
+    "examples",
+    "cordis.patch.yml",
+    "server.json",
+    "screenshots.json",
+    "README.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sjh9714/routinekit.git"
+  },
   "homepage": "https://github.com/sjh9714/routinekit#readme",
-  "bugs": { "url": "https://github.com/sjh9714/routinekit/issues" },
-  "keywords": ["dsh", "dsh-plugin", "deepseek-harness", "webmcp", "mcp", "agent-skills", "record-replay", "workflow", "automation"],
-  "dsh": { "bundle": { "patch": "./cordis.patch.yml" }, "client": { "inject": ["@deepseek-ai/dsh-client-runtime", "@deepseek-ai/dsh-client-ui-slots"], "platform": "web" } },
+  "bugs": {
+    "url": "https://github.com/sjh9714/routinekit/issues"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "webmcp",
+    "mcp",
+    "agent-skills",
+    "record-replay",
+    "mcp-apps",
+    "workflow",
+    "automation"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-slots"
+      ],
+      "platform": "web"
+    }
+  },
   "scripts": {
     "test": "node --test test/*.test.mjs",
     "build": "node scripts/build.mjs",
@@ -24,8 +72,33 @@
     "test:e2e": "node --test test/e2e/*.test.mjs",
     "prepublishOnly": "npm run build && npm run check && npm test && npm run test:e2e"
   },
-  "dependencies": { "@modelcontextprotocol/sdk": "1.30.0", "ajv": "8.20.0", "playwright-core": "1.62.1", "zod": "^4.0.0" },
-  "peerDependencies": { "@deepseek-ai/dsh-tools": ">=0.1.2-rc.1 <0.2.0", "react": "^18.3.1" },
-  "peerDependenciesMeta": { "@deepseek-ai/dsh-tools": { "optional": true }, "react": { "optional": true } },
-  "devDependencies": { "@deepseek-ai/cordis": "4.0.2", "@deepseek-ai/dsh-tools": "0.1.2-rc.1", "@deepseek-ai/dsh-agent": "0.1.2-rc.1", "@deepseek-ai/dsh-user-questions": "0.1.2-rc.1", "esbuild": "^0.28.2", "react": "18.3.1" }
+  "dependencies": {
+    "@modelcontextprotocol/ext-apps": "1.7.5",
+    "@modelcontextprotocol/sdk": "1.30.0",
+    "ajv": "8.20.0",
+    "fflate": "0.8.3",
+    "playwright-core": "1.62.1",
+    "zod": "^4.0.0"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/dsh-tools": ">=0.1.2-rc.1 <0.2.0",
+    "react": "^18.3.1"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/dsh-tools": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "4.0.2",
+    "@deepseek-ai/dsh-agent": "0.1.2-rc.1",
+    "@deepseek-ai/dsh-tools": "0.1.2-rc.1",
+    "@deepseek-ai/dsh-user-questions": "0.1.2-rc.1",
+    "@modelcontextprotocol/server-filesystem": "2026.8.31",
+    "esbuild": "^0.28.2",
+    "react": "18.3.1"
+  }
 }

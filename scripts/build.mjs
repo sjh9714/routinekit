@@ -1,6 +1,10 @@
 import { build } from 'esbuild';
-import { mkdir, writeFile, chmod } from 'node:fs/promises';
+import { mkdir, writeFile, chmod, readFile } from 'node:fs/promises';
 import { Script } from 'node:vm';
 const result = await build({ entryPoints: ['client/index.jsx'], bundle: true, write: false, format: 'cjs', platform: 'browser', target: 'es2020', external: ['react', 'react/jsx-runtime', '@deepseek-ai/*'], jsx: 'automatic' });
 const source = `window.__ModuleLoader__.load({id:"routinekit",factory:(require)=>{var module={exports:{}};var exports=module.exports;\n${result.outputFiles[0].text}\nreturn module.exports;}});\n`;
 new Script(source); await mkdir('lib', { recursive: true }); await writeFile('lib/client.js', source); await chmod('bin/cli.mjs', 0o755); console.log('Built DSH workbench client.');
+const app = await build({ entryPoints: ['client/mcp-app.mjs'], bundle: true, write: false, format: 'iife', platform: 'browser', target: 'es2022', minify: true });
+const style = await readFile('web/style.css', 'utf8');
+const html = (await readFile('web/index.html', 'utf8')).replace('<link rel="stylesheet" href="./style.css">', () => `<style>${style}</style>`).replace('<script type="module" src="./app.js"></script>', () => `<script>${app.outputFiles[0].text.replaceAll('</script', '<\\/script')}</script>`);
+await writeFile('lib/mcp-app.html', html); console.log('Built self-contained MCP App (no external network assets).');

@@ -1,7 +1,10 @@
 import { mkdir, readFile, writeFile, readdir, lstat } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
 import { homedir } from 'node:os';
-import { validateRoutine, fail, LIMITS } from './core.mjs';
+import { zipSync, strToU8 } from 'fflate';
+import { validateRoutine, fail, LIMITS, fingerprint } from './core.mjs';
+
+export function savedToolName(name) { const slug = name.replaceAll('-', '_'); return `routine_saved_${slug.length <= 48 ? slug : `${slug.slice(0,39)}_${fingerprint(name).slice(0,8)}`}`; }
 
 export function defaultHome() { return resolve(process.env.ROUTINEKIT_HOME || join(homedir(), '.routinekit')); }
 export class RoutineStore {
@@ -27,10 +30,14 @@ export class RoutineStore {
     try { names = await readdir(this.root); } catch (e) { if (e.code === 'ENOENT') return []; throw e; }
     const items = [];
     for (const file of names.filter(n => /^[a-z][a-z0-9-]{1,63}\.routine\.json$/.test(n)).sort().slice(0,500)) {
-      try { const r = await this.get(file.replace('.routine.json', '')); items.push({ name: r.name, steps: r.steps.length, inputs: r.inputs, tools: [...new Set(r.steps.map(s => s.tool))] }); } catch { /* Invalid imports are not runnable. */ }
+      try { const r = await this.get(file.replace('.routine.json', '')); items.push({ name: r.name, steps: r.steps.length, inputs: r.inputs, ...(r.expose ? { toolName: savedToolName(r.name) } : {}), tools: [...new Set(r.steps.map(s => s.tool))] }); } catch { /* Invalid imports are not runnable. */ }
     }
     return items;
   }
+}
+export function skillBundle(routine) {
+  const r = validateRoutine(routine);
+  return zipSync({ 'SKILL.md': strToU8(skillMarkdown(r)), 'routine.json': strToU8(JSON.stringify(r, null, 2) + '\n') });
 }
 export function skillMarkdown(routine) {
   const r = validateRoutine(routine);

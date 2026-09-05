@@ -25,12 +25,14 @@ test('real DSH tool pipeline captures, saves, replays and retains host denial', 
     let result = await call('routine_record', { name: 'dsh-flow', inputs_json: '{"query":"first"}', tools: ['dsh:demo_search','dsh:demo_open'] }); assert.equal(result.isError, false, JSON.stringify(result));
     assert.equal((await call('demo_search', { query: 'first' })).isError, false);
     assert.equal((await call('demo_open', { id: 'id-first' })).isError, false);
-    result = await call('routine_save', { checks_json: '[{"step":"step_2","path":"/done","equals":true}]' }); assert.equal(result.isError, false, JSON.stringify(result));
-    result = await call('routine_run', { name: 'dsh-flow', inputs_json: '{"query":"second"}' }); assert.equal(result.isError, false, JSON.stringify(result));
+    result = await call('routine_save', { expose: true, checks_json: '[{"step":"step_2","path":"/done","equals":true}]' }); assert.equal(result.isError, false, JSON.stringify(result));
+    assert.ok(ctx.tools.get('routine_saved_dsh_flow', agent)); assert.equal(ctx.tools.get('routine_saved_dsh_flow'), undefined);
+    result = await call('routine_saved_dsh_flow', { query: 'second' }); assert.equal(result.isError, false, JSON.stringify(result));
     const replayed = JSON.parse(result.value.json); assert.equal(replayed.result.id, 'id-second'); assert.equal(replayed.modelCalls, 0); assert.equal(invoked.length, 4); assert.equal(approvals.length, 3);
     const unguard = ctx.tools.guard(exec => exec.name === 'demo_open' ? 'test denial' : undefined);
     result = await call('routine_run', { name: 'dsh-flow', inputs_json: '{"query":"third"}' }); assert.equal(result.isError, true); assert.equal(invoked.length, 5); unguard();
     const other = { id: 'other-agent', options: {}, session: { cwd: 'other' } }; const otherScope = createScope(ctx, other); other.ctx = otherScope.ctx;
+    assert.equal(ctx.tools.get('routine_saved_dsh_flow', other), undefined);
     const otherResult = await ctx.tools.execute({ name: 'routine_list', arguments: {}, agent: other, callId: randomUUID(), signal: new AbortController().signal });
     assert.equal(JSON.parse(otherResult.value.json).routines.length, 0); await otherScope.dispose();
   } finally { await scope.dispose(); await ctx.fiber.dispose(); if (before === undefined) delete process.env.DSH_HOME; else process.env.DSH_HOME = before; await rm(home, { recursive: true }); }

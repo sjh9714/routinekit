@@ -14,12 +14,16 @@ test('real workbench UI previews, approves, saves, changes input and replays', {
   try {
     await page.goto(server.url);
     await page.getByText('2 successful calls captured', { exact:false }).waitFor();
-    await page.locator('#checks').fill('[{"step":"step_2","path":"/opened","equals":true}]');
+    await page.getByRole('button', { name: 'Add success check', exact: true }).click();
+    await page.getByLabel('Result field', { exact: true }).selectOption({ label: 'step_2 /opened' });
+    await page.getByLabel('Expected value', { exact: true }).fill('true');
+    await page.locator('#expose').check();
     await page.getByRole('button',{name:'Preview capture',exact:true}).click();
     await page.locator('#data').filter({hasText:'contractHash'}).waitFor();
     await page.getByRole('button',{name:'Review & save',exact:true}).click();
     await page.getByRole('button',{name:'Approve once',exact:true}).click();
     await page.getByText('1 saved',{exact:true}).waitFor();
+    await page.locator('.routine code').filter({ hasText: 'routine_saved_' }).waitFor();
     await page.locator('[data-input="category"]').fill('timer');
     await page.getByRole('button',{name:'Review & run →',exact:true}).click();
     for (let i=0;i<3;i++) { const button = page.getByRole('button',{name:'Approve once',exact:true}); await button.waitFor(); const cardId = await page.locator('.approval').getAttribute('data-approval-id'); await button.click(); await page.locator(`[data-approval-id="${cardId}"]`).waitFor({state:'detached'}); }

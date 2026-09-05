@@ -3,6 +3,7 @@ import { randomBytes } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { safeError, fail, jsonCopy, LIMITS } from './core.mjs';
 import { skillMarkdown } from './store.mjs';
+import { invokeTool } from './tools.mjs';
 
 export function trustedRequest(req) {
   if (!['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress)) return false;
@@ -42,7 +43,7 @@ export class ApprovalQueue {
 }
 
 export function createHandler({ resolveService, authorize, prefix = '', approvals = new ApprovalQueue(), dsh = false }) {
-  const assets = { '/': ['index.html', 'text/html; charset=utf-8'], '/app.js': ['app.js', 'text/javascript'], '/style.css': ['style.css', 'text/css'] };
+  const assets = { '/': ['index.html', 'text/html; charset=utf-8'], '/app.js': ['app.js', 'text/javascript'], '/forms.js': ['forms.js', 'text/javascript'], '/style.css': ['style.css', 'text/css'] };
   return async (req, res) => {
     if (!trustedRequest(req)) { respond(res, 403, { error: 'Local, same-origin access only.' }); return; }
     const url = new URL(req.url, 'http://local.invalid'); const path = url.pathname.slice(prefix.length) || '/';
@@ -55,11 +56,12 @@ export function createHandler({ resolveService, authorize, prefix = '', approval
       if (req.method === 'GET' && path === '/api/tools') { respond(res, 200, { tools: await service.tools() }); return; }
       if (req.method === 'GET' && path === '/api/routine') { respond(res, 200, await service.store.get(url.searchParams.get('name'))); return; }
       if (req.method === 'GET' && path === '/api/skill') { respond(res, 200, skillMarkdown(await service.store.get(url.searchParams.get('name'))), 'text/plain'); return; }
+      if (req.method === 'GET' && path === '/api/bundle') { respond(res, 200, await invokeTool(service, 'routine_export', { name: url.searchParams.get('name') })); return; }
       if (req.method !== 'POST') { respond(res, 404, { error: 'Not found.' }); return; }
       const value = await body(req);
       if (path === '/api/approval') { approvals.answer(value.id, value.allow); respond(res, 200, { ok: true }); return; }
       if (path !== '/api/action') { respond(res, 404, { error: 'Not found.' }); return; }
-      if (!['record', 'preview', 'save', 'discard', 'run', 'open', 'call', 'stop', 'import'].includes(value.action)) fail('ACTION', 'Unknown workbench action.');
+      if (!['record', 'preview', 'save', 'discard', 'run', 'open', 'call', 'stop', 'import', 'connect'].includes(value.action)) fail('ACTION', 'Unknown workbench action.');
       if (value.action === 'stop') approvals.close();
       if (dsh && value.action === 'run') {
         const r = await service.store.get(value.args?.name);
