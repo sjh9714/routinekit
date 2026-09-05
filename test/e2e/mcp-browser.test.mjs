@@ -20,8 +20,9 @@ test('MCP client captures and replays a native browser workflow with fresh elici
     await call('routine_record',{name:'mcp-project',inputs_json:'{"category":"notes"}',tools:['webmcp:catalog_search','webmcp:catalog_open']});
     const first=await call('routine_web_call',{name:'webmcp:catalog_search',arguments_json:'{"category":"notes"}'});
     await call('routine_web_call',{name:'webmcp:catalog_open',arguments_json:JSON.stringify({id:first.items[0].id})});
-    await call('routine_save',{checks_json:'[{"step":"step_2","path":"/opened","equals":true}]'});
-    const result=await call('routine_run',{name:'mcp-project',inputs_json:'{"category":"drawing"}'});
+    await call('routine_save',{expose:true,checks_json:'[{"step":"step_2","path":"/opened","equals":true}]'});
+    const named=(await client.listTools()).tools.find(t=>t.name==='routine_saved_mcp_project'); assert.equal(named.inputSchema.properties.category.type,'string');
+    const result=await call(named.name,{category:'drawing'});
     assert.equal(result.result.name,'Moss Sketch');assert.equal(result.modelCalls,0);assert.equal(approvals,8);
   } finally {await client.close();await server.close();await service.close();await fixture.close();await rm(root,{recursive:true});}
 });

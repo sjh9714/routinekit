@@ -12,6 +12,7 @@ try {
   const packed = JSON.parse(run(['pack','--json','--pack-destination',temp],process.cwd()))[0];
   const files = packed.files.map(f=>f.path);
   for (const required of ['src/core.mjs','src/dsh.mjs','src/mcp.mjs','src/upstream.mjs','bin/cli.mjs','lib/client.js','lib/mcp-app.html','web/index.html','web/forms.js','server.json','cordis.patch.yml','README.md']) if (!files.includes(required)) throw new Error(`Missing packaged file: ${required}`);
+  for (const screenshot of JSON.parse(await readFile('screenshots.json','utf8'))) if (!files.includes(screenshot)) throw new Error('A packaged screenshot reference is missing');
   if(files.some(f=>f.startsWith('test/')||f.includes('.artifacts')||f.includes('node_modules')||f.endsWith('.env'))) throw new Error('Unexpected packaged content');
   await writeFile(join(temp,'package.json'),'{"name":"routinekit-package-check","private":true,"type":"module"}\n');
   run(['install','--ignore-scripts','--no-audit','--no-fund',join(temp,packed.filename)],temp);

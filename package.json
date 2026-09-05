@@ -27,6 +27,7 @@
     "cordis.patch.yml",
     "server.json",
     "screenshots.json",
+    "docs/workbench.png",
     "README.md",
     "LICENSE"
   ],
