@@ -24,8 +24,17 @@ jobs:
       - run: npx playwright-core install --with-deps chromium
       - run: npm run test:e2e
       - run: npm run verify:package
+      - name: Install official DSH host for isolated plugin check
+        if: matrix.node == 22
+        run: |
+          npm install --global pnpm@11.24.0
+          npm install --prefix .artifacts/dsh-host --no-audit --no-fund @deepseek-ai/dsh@0.1.2-rc.1
+      - name: Verify official DSH install, workbench and removal
+        if: matrix.node == 22
+        run: npm run verify:host
       - uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: failure-${{ matrix.os }}-node${{ matrix.node }}
           path: .artifacts/*.png
+          include-hidden-files: true

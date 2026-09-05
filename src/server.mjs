@@ -70,7 +70,7 @@ export function createHandler({ resolveService, authorize, prefix = '', approval
       const disconnected = () => { if (!res.writableEnded) controller.abort(); };
       res.on('close', disconnected);
       try {
-        const result = await service.invoke(value.action, value.args || {}, { signal: controller.signal, approve: request => approvals.ask(request, controller.signal) });
+        const result = await service.invoke(value.action, value.args || {}, { signal: controller.signal, approve: (request, signal) => approvals.ask(request, signal) });
         respond(res, 200, result);
       } finally { res.removeListener('close', disconnected); }
     } catch (error) { const safe = safeError(error); respond(res, 400, { code: safe.code, error: safe.message }); }

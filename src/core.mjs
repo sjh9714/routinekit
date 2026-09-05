@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import Ajv from 'ajv';
 
 export const LIMITS = Object.freeze({ steps: 40, bytes: 512 * 1024, depth: 24, ttl: 15 * 60_000 });
-const ajv = new Ajv({ strict: false, allErrors: false, validateFormats: false });
+const ajv = new Ajv({ strict: false, strictSchema: true, allErrors: false, validateFormats: false });
 const forbiddenKeys = new Set(['__proto__', 'prototype', 'constructor']);
 const sensitiveKey = /^(?:password|passwd|passphrase|secret|token|access[_-]?token|refresh[_-]?token|api[_-]?key|authorization|cookie|set-cookie|session[_-]?cookie|credit[_-]?card|card[_-]?number|cvv|otp)$/i;
 const secretValue = /(?:\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9_-]{20,})\b|\bBearer\s+\S+|-----BEGIN [A-Z ]*PRIVATE KEY-----|\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b)/;
@@ -63,8 +63,13 @@ function compileSchema(schema) {
   const copy = jsonCopy(schema);
   function noRefs(node) {
     if (!node || typeof node !== 'object') return;
+    if (Array.isArray(node)) { node.forEach(noRefs); return; }
     if ('$ref' in node || '$dynamicRef' in node || '$recursiveRef' in node || 'pattern' in node || 'patternProperties' in node || 'format' in node) fail('UNSUPPORTED_SCHEMA', 'Referenced, regex, and format schemas are not supported in v0.1.');
-    for (const child of Object.values(node)) noRefs(child);
+    for (const [key, child] of Object.entries(node)) {
+      if (['properties', '$defs', 'definitions', 'dependencies', 'dependentSchemas'].includes(key) && child && typeof child === 'object') Object.values(child).forEach(noRefs);
+      else if (['allOf','anyOf','oneOf','prefixItems'].includes(key) && Array.isArray(child)) child.forEach(noRefs);
+      else if (['items','additionalItems','additionalProperties','not','if','then','else','contains','propertyNames','unevaluatedProperties','unevaluatedItems'].includes(key)) noRefs(child);
+    }
   }
   noRefs(copy);
   let validate;
@@ -163,7 +168,7 @@ export class Recorder {
     return { state: r.invalid ? 'invalid' : 'recording', name: r.name, steps: r.calls.length, pending: r.active.size, error: r.invalid, tools: r.contracts.map(t => t.name) };
   }
   invalidate(message = 'A selected tool failed. Discard and record a successful linear task.') {
-    if (this.#recording) { this.#recording.invalid = message; this.#recording.calls = []; }
+    if (this.#recording) { this.#recording.invalid = message; this.#recording.calls = []; this.#recording.inputs = {}; }
   }
   start(name, token = randomUUID()) {
     if (this.status().state !== 'recording') return undefined;
@@ -280,7 +285,7 @@ export async function replay(routine, inputs, adapter, { signal, approve, onEven
     }
   }
   await preflight();
-  if (!approve || !await approve({ stage: 'run', routine: jsonCopy(r), inputs: jsonCopy(params) })) fail('APPROVAL_REQUIRED', 'Review and approve this run before executing any step.');
+  if (!approve || !await approve({ stage: 'run', routine: jsonCopy(r), inputs: jsonCopy(params) }, signal)) fail('APPROVAL_REQUIRED', 'Review and approve this run before executing any step.');
   checkAbort(signal); await preflight();
   const outputs = new Map();
   for (const step of r.steps) {
@@ -288,7 +293,7 @@ export async function replay(routine, inputs, adapter, { signal, approve, onEven
     let args = jsonCopy(step.arguments);
     for (const binding of step.bindings) args = replaceAt(args, binding.at, 'input' in binding ? params[binding.input] : getPath(outputs.get(binding.from), binding.path));
     validateSchema(step.contract.inputSchema, args, 'INPUT'); assertNoSecrets(args);
-    if (adapter.approveEachCall && !await approve({ stage: 'step', routine: jsonCopy(r), step: jsonCopy(step), arguments: jsonCopy(args) })) fail('APPROVAL_REQUIRED', 'This tool call was not approved.');
+    if (adapter.approveEachCall && !await approve({ stage: 'step', routine: jsonCopy(r), step: jsonCopy(step), arguments: jsonCopy(args) }, signal)) fail('APPROVAL_REQUIRED', 'This tool call was not approved.');
     checkAbort(signal);
     const current = await adapter.describe(step.tool, step.contract);
     if (!current || fingerprint(toolContract(current)) !== step.contractHash) fail('TOOL_CHANGED', 'Tool changed immediately before dispatch.');

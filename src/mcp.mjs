@@ -10,9 +10,9 @@ export function createMCPServer(service = new RoutineService()) {
   server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOL_SPECS }));
   server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
     try {
-      const result = await invokeTool(service, request.params.name, request.params.arguments || {}, { signal: extra.signal, approve: async review => {
+      const result = await invokeTool(service, request.params.name, request.params.arguments || {}, { signal: extra.signal, approve: async (review, signal) => {
         if (!server.getClientCapabilities()?.elicitation) fail('ELICITATION_REQUIRED', 'This MCP client must support human form elicitation. Use the local routinekit workbench if it does not; there is no auto-approve fallback.');
-        const answer = await server.elicitInput({ mode: 'form', message: `RoutineKit — review ${review.stage}\n${JSON.stringify(review, null, 2)}`, requestedSchema: { type: 'object', properties: { approved: { type: 'boolean', title: 'Approve this exact action once', default: false } }, required: ['approved'] } }, { signal: extra.signal });
+        const answer = await server.elicitInput({ mode: 'form', message: `RoutineKit — review ${review.stage}\n${JSON.stringify(review, null, 2)}`, requestedSchema: { type: 'object', properties: { approved: { type: 'boolean', title: 'Approve this exact action once', default: false } }, required: ['approved'] } }, { signal });
         return answer.action === 'accept' && answer.content?.approved === true;
       } });
       return { content: [{ type: 'text', text: JSON.stringify(result) }] };

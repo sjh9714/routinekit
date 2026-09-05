@@ -1,0 +1,50 @@
+import { spawn, spawnSync } from 'node:child_process';
+import { mkdtemp, readFile, rm, mkdir } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { resolve, join } from 'node:path';
+import { launchBrowser } from '../src/browser.mjs';
+const hostBin = resolve(process.env.ROUTINEKIT_TEST_HOST || '.artifacts/dsh-host/node_modules/@deepseek-ai/dsh/lib/bin.js');
+const temp = await mkdtemp(join(tmpdir(),'routinekit-host-check-')); const profile = join(temp,'dsh-home');
+// The official host selects its browser directory picker for unattended/SSH sessions.
+const env = {...process.env,DSH_HOME:profile,SSH_CONNECTION:'routinekit-headless-test',DEEPSEEK_API_KEY:''}; const npmCli=process.env.npm_execpath;
+if(!npmCli)throw new Error('Run npm run verify:host.');
+function run(args){const result=spawnSync(process.execPath,[hostBin,...args],{env,encoding:'utf8',timeout:120000});if(result.status!==0)throw new Error((result.stderr||result.stdout).replace(/([?&]token=)[^\s&]+/g,'$1[redacted]'));return result.stdout;}
+let child,browser;
+try {
+  const workspace=join(temp,'example-workspace');await mkdir(workspace);
+  const packed=spawnSync(process.execPath,[npmCli,'pack','--json','--pack-destination',temp],{encoding:'utf8'});if(packed.status!==0)throw new Error(packed.stderr);
+  const tarball=join(temp,JSON.parse(packed.stdout)[0].filename);
+  run(['plugin','--profile','web','add',tarball]);
+  const policy=await readFile(join(profile,'profiles/web/pnpm-workspace.yaml'),'utf8');
+  if(policy.includes('minimumReleaseAgeExclude'))throw new Error('Unexpected package-age policy exception in the fresh test profile.');
+  const config=run(['--profile','web','--dump-config']);if(!config.includes('name: routinekit'))throw new Error('Plugin missing from composed host configuration.');
+  child=spawn(process.execPath,[hostBin,'web','--no-open','--host','127.0.0.1','--port','0'],{env,stdio:['ignore','pipe','pipe']});
+  let logs=''; const url=await new Promise((resolveUrl,reject)=>{const timer=setTimeout(()=>reject(new Error('Host startup timed out.')),60000);const output=chunk=>{logs+=chunk.toString();if(logs.length>200000)logs=logs.slice(-100000);const match=logs.match(/dsh web: (http:\/\/\S+)/);if(match){clearTimeout(timer);resolveUrl(match[1]);}};child.stdout.on('data',output);child.stderr.on('data',output);child.once('exit',code=>{clearTimeout(timer);reject(new Error(`Host exited ${code}: ${logs.replace(/([?&]token=)[^\s&]+/g,'$1[redacted]')}`));});});
+  browser=await launchBrowser({headless:true});const page=await browser.newPage({viewport:{width:1440,height:1000}});const errors=[];page.on('pageerror',e=>errors.push(e.message));
+  await page.goto(url);await page.waitForLoadState('networkidle');
+  await mkdir('.artifacts',{recursive:true});await page.screenshot({path:'.artifacts/dsh-host.png',fullPage:true});
+  console.log('Official DSH host booted with the packaged plugin. Page title:',await page.title());
+  console.log('Page errors:',JSON.stringify(errors));
+  if(errors.length)throw new Error('Host UI has browser errors.');
+  const button=page.getByRole('button',{name:'Open RoutineKit',exact:true});await button.waitFor();console.log('RoutineKit sidebar button is rendered.');
+  const consent=page.getByRole('button',{name:'Continue',exact:true});if(await consent.isVisible())await consent.click();
+  await page.getByRole('button',{name:'Configure later',exact:true}).click();
+  await page.getByRole('button',{name:'Choose workspace',exact:true}).click();
+  await page.getByRole('dialog').waitFor();
+  await page.getByRole('button',{name:'Edit path',exact:true}).click();
+  await page.getByRole('textbox',{name:'Edit path',exact:true}).fill(workspace);
+  await page.getByRole('textbox',{name:'Edit path',exact:true}).press('Enter');
+  await page.getByRole('button',{name:'Open',exact:true}).click();
+  await page.getByRole('dialog').waitFor({state:'hidden'});
+  await button.click();
+  const workbench=page.frameLocator('iframe[title="RoutineKit workbench"]');
+  await workbench.locator('#recording').getByText('Your workflow starts here.',{exact:true}).waitFor();
+  await workbench.locator('#record-tools option').first().waitFor({state:'attached'});
+  if(errors.length)throw new Error('Host workbench has browser errors.');
+  console.log('Actual DSH task opens an initialized, empty RoutineKit workbench.');
+  await page.screenshot({path:'.artifacts/dsh-host.png',fullPage:true});
+  await browser.close();browser=undefined;
+  child.kill('SIGTERM');await new Promise(resolve=>child.once('exit',resolve));child=undefined;
+  run(['plugin','--profile','web','remove','routinekit']);if(run(['--profile','web','--dump-config']).includes('name: routinekit'))throw new Error('Plugin removal failed.');
+  console.log('DSH install, authenticated web boot, actual workspace/task workbench, live tool discovery and removal passed. Package-age policy preserved.');
+} finally {await browser?.close();if(child&&child.exitCode===null){child.kill('SIGTERM');await new Promise(resolve=>{child.once('exit',resolve);setTimeout(()=>{child.kill('SIGKILL');resolve();},5000).unref();});}await rm(temp,{recursive:true});}

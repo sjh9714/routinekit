@@ -4,13 +4,17 @@
 
 RoutineKit turns successful, explicitly selected tool calls into **reviewed, parameterized, executable routines**. Change the inputs, check the live tools, approve the run, and replay without asking a model to reconstruct each step.
 
+![Actual capture, approval, and replay in the local workbench](https://raw.githubusercontent.com/sjh9714/routinekit/main/docs/demo.gif)
+
+*A scripted tutorial through a real native-WebMCP browser. [Watch the recording](https://github.com/sjh9714/routinekit/blob/main/docs/demo.mp4).*
+
 Start in **DeepSeek Harness (DSH)**, or use the standalone workbench and **MCP** server with native **WebMCP** pages. Export a routine with a companion `SKILL.md` for another agent to discover and run.
 
 > **v0.1 preview.** This is a deterministic runner for reviewed linear tool workflows, not a general computer-use agent. It does not silently record your desktop, read old chats, reuse login profiles, or promise that an arbitrary task can be generalized from one example.
 
 ## Try it locally
 
-Requires Node **22.19+** and a current Chrome/Edge or Playwright Chromium with native WebMCP. Tested locally with Chrome 152; browser APIs are experimental and may change.
+Requires Node **22.19+** and a current Chrome/Edge or Playwright Chromium with native WebMCP. Tested locally with Chromium 151 and Chrome 152; browser APIs are experimental and may change.
 
 ```sh
 npx routinekit doctor
@@ -34,7 +38,7 @@ The demo's localhost origin exists only while that process runs. Demo routines d
 No account, model API key, or GPU is needed for the tutorial. If no supported browser is installed:
 
 ```sh
-npx playwright-core@1.63.0 install chromium
+npx playwright-core@1.62.1 install chromium
 ```
 
 ## In DeepSeek Harness
@@ -71,6 +75,8 @@ Add this stdio server using your client's normal MCP configuration:
 ```
 
 **Human form elicitation is required** for actions. A client without it can list/inspect routines but cannot auto-approve execution. Use `npx routinekit open` for the standalone workbench instead. Do not infer full client compatibility merely from basic MCP support.
+
+Stop settles the active server operation and sends protocol cancellation for pending elicitation. Dismissing the client's approval UI depends on that client's cancellation support.
 
 Typical flow:
 

@@ -32,6 +32,8 @@ export function apply(ctx) {
     const answer = await ctx.userQuestions.ask({ agent, signal, questions: [{ id: 'routinekit-approval', header: 'RoutineKit', question: `Approve once: ${request.stage}?`, detail: JSON.stringify(request, null, 2), options: [{ label: 'Deny', description: 'Do not perform this action.' }, { label: 'Approve once', description: 'Approve only the exact action shown. Existing DSH tool permissions still apply.' }] }] });
     return answer.answers.some(a => a.id === 'routinekit-approval' && a.selected.includes('Approve once'));
   }
+  // Creating a task prepares an empty workbench; it does not enable capture or execute tools.
+  ctx.on('agent/created', ({ agent }) => { instance(agent); });
   for (const spec of TOOL_SPECS) ctx.tools.register({
     name: spec.name, description: spec.description, parameters: spec.inputSchema, timeoutMs: 15 * 60_000,
     output: { schema: { type: 'object', properties: { json: { type: 'string' } }, required: ['json'], additionalProperties: false }, render: (_args, value) => [{ type: 'text', text: value.json }] },
@@ -45,7 +47,7 @@ export function apply(ctx) {
         if (result.concludesTurn) exec.concludeTurn();
         return result.value;
       };
-      try { return { json: JSON.stringify(await invokeTool(service, spec.name, args, { signal: exec.signal, approve: request => approve(exec.agent, exec.signal, request), nativeCall })) }; }
+      try { return { json: JSON.stringify(await invokeTool(service, spec.name, args, { signal: exec.signal, approve: (request, signal) => approve(exec.agent, signal, request), nativeCall })) }; }
       catch (error) { const safe = safeError(error); throw new Error(`${safe.code}: ${safe.message}`); }
     },
   });

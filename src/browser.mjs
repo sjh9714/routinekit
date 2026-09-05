@@ -17,35 +17,40 @@ export async function launchBrowser({ headless = false } = {}) {
   for (const channel of ['chrome', 'msedge']) {
     try { return await chromium.launch({ ...options, channel }); } catch { /* Try another installed Chromium browser. */ }
   }
-  fail('BROWSER_MISSING', 'Install Chrome/Edge, or run: npx playwright-core@1.63.0 install chromium');
+  fail('BROWSER_MISSING', 'Install Chrome/Edge, or run: npx playwright-core@1.62.1 install chromium');
 }
 
 /** One blank, isolated browser per connection. No profile or cookies are imported. */
 export class WebMCPBrowser {
   constructor({ headless = false } = {}) { this.headless = headless; this.approveEachCall = true; }
-  async open(value) {
+  async open(value, { signal } = {}) {
     await this.close();
+    checkAbort(signal);
     const url = checkedUrl(value); this.origin = url.origin;
-    this.browser = await launchBrowser({ headless: this.headless });
-    this.context = await this.browser.newContext({ acceptDownloads: false, serviceWorkers: 'block', viewport: { width: 1180, height: 760 } });
-    this.page = await this.context.newPage();
-    this.context.on('page', page => { if (page !== this.page) void page.close(); });
-    this.page.on('download', download => { void download.cancel(); });
-    this.page.on('dialog', dialog => { void dialog.dismiss(); });
-    await this.context.route('**/*', route => {
-      const req = route.request();
-      let target;
-      try { target = new URL(req.url()); } catch { return route.abort(); }
-      if (target.origin !== this.origin || (!['GET', 'HEAD', 'OPTIONS'].includes(req.method()) && !this.executing)) return route.abort();
-      return route.continue();
-    });
+    const cancel = () => { void this.close(); };
+    signal?.addEventListener('abort', cancel, { once: true });
     try {
+      this.browser = await launchBrowser({ headless: this.headless });
+      checkAbort(signal);
+      this.context = await this.browser.newContext({ acceptDownloads: false, serviceWorkers: 'block', viewport: { width: 1180, height: 760 } });
+      this.page = await this.context.newPage();
+      this.context.on('page', page => { if (page !== this.page) void page.close(); });
+      this.page.on('download', download => { void download.cancel(); });
+      this.page.on('dialog', dialog => { void dialog.dismiss(); });
+      await this.context.route('**/*', route => {
+        const req = route.request();
+        let target;
+        try { target = new URL(req.url()); } catch { return route.abort(); }
+        if (target.origin !== this.origin || (!['GET', 'HEAD', 'OPTIONS'].includes(req.method()) && !this.executing)) return route.abort();
+        return route.continue();
+      });
       await this.page.goto(url.href, { waitUntil: 'domcontentloaded', timeout: 20_000 });
       await this.page.waitForFunction(() => !!document.modelContext?.getTools || !!navigator.modelContextTesting?.listTools, null, { timeout: 5000 });
       if (new URL(this.page.url()).origin !== this.origin) fail('ORIGIN', 'Navigation left the approved origin.');
       this.mode = await this.page.evaluate(() => document.modelContext?.getTools ? 'webmcp' : 'chromium-testing');
       return { url: this.page.url(), origin: this.origin, mode: this.mode, tools: await this.list() };
-    } catch (error) { await this.close(); throw error instanceof RoutineError ? error : new RoutineError('WEBMCP_UNAVAILABLE', 'This page does not expose supported WebMCP tools. No screen-scraping fallback was used.'); }
+    } catch (error) { await this.close(); checkAbort(signal); throw error instanceof RoutineError ? error : new RoutineError('WEBMCP_UNAVAILABLE', 'This page does not expose supported WebMCP tools. No screen-scraping fallback was used.'); }
+    finally { signal?.removeEventListener('abort', cancel); }
   }
   async list() {
     if (!this.page || this.page.isClosed()) fail('BROWSER_CLOSED', 'Open a WebMCP page first.');

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { serveFixture } from '../../src/fixture.mjs';
 import { WebMCPBrowser } from '../../src/browser.mjs';
 import { Recorder, replay } from '../../src/core.mjs';
+import { createServer } from 'node:http';
 
 test('three native WebMCP workflows capture and replay with changed inputs', { timeout: 90000 }, async t => {
   const fixture = await serveFixture(); const browser = new WebMCPBrowser({ headless: true });
@@ -27,4 +28,25 @@ test('three native WebMCP workflows capture and replay with changed inputs', { t
     });
   } finally { await browser.close(); await fixture.close(); }
   assert.equal(browser.page, undefined); assert.equal(browser.browser, undefined);
+});
+
+test('cancel during real browser navigation closes the owned browser', { timeout: 15000 }, async () => {
+  let received;
+  const requested = new Promise(resolve => { received = resolve; });
+  const server = createServer(() => received());
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const browser = new WebMCPBrowser({ headless: true });
+  const controller = new AbortController();
+  try {
+    const opening = browser.open(`http://127.0.0.1:${server.address().port}`, { signal: controller.signal });
+    const outcome = opening.then(() => null, error => error);
+    await requested;
+    controller.abort();
+    assert.equal((await outcome)?.code, 'CANCELLED');
+    assert.equal(browser.page, undefined);
+    assert.equal(browser.browser, undefined);
+  } finally {
+    await browser.close();
+    await new Promise(resolve => { server.close(resolve); server.closeAllConnections(); });
+  }
 });

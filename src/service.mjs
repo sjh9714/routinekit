@@ -18,7 +18,7 @@ export class RoutineService {
   }
   async requestApproval(approve, request, signal) {
     checkAbort(signal);
-    if (!approve || !await approve(jsonCopy(request))) fail('APPROVAL_REQUIRED', 'Human review is required for this action.');
+    if (!approve || !await approve(jsonCopy(request), signal)) fail('APPROVAL_REQUIRED', 'Human review is required for this action.');
     checkAbort(signal);
   }
   async invoke(action, args = {}, { approve, signal, nativeCall } = {}) {
@@ -29,12 +29,14 @@ export class RoutineService {
     if (action === 'stop') { this.controller?.abort(); await this.browser.close(); return { status: 'stopped' }; }
     if (this.busy) fail('BUSY', 'Another operation is still active.');
     this.busy = true;
+    this.controller = new AbortController();
+    signal = signal ? AbortSignal.any([signal, this.controller.signal]) : this.controller.signal;
     try {
       if (action === 'open') {
         if (this.recorder.status().state === 'recording') fail('RECORDING', 'Finish or discard recording before changing pages.');
         assertNoSecrets(args.url);
         await this.requestApproval(approve, { stage: 'open', url: args.url, note: 'Open this origin in an empty browser. Cross-origin requests, downloads, popups and existing profiles are not supported.' }, signal);
-        return await this.browser.open(args.url);
+        return await this.browser.open(args.url, { signal });
       }
       if (action === 'record') {
         const tools = await this.tools();
@@ -67,8 +69,7 @@ export class RoutineService {
       if (action === 'run') {
         if (this.recorder.status().state !== 'idle' && this.recorder.status().state !== 'expired') fail('RECORDING', 'Save or discard recording before replay.');
         const routine = await this.store.get(args.name);
-        this.events = []; this.lastResult = null; this.runState = 'running'; this.controller = new AbortController();
-        const fused = signal ? AbortSignal.any([signal, this.controller.signal]) : this.controller.signal;
+        this.events = []; this.lastResult = null; this.runState = 'running';
         const adapter = {
           approveEachCall: routine.steps.some(s => s.tool.startsWith('webmcp:')),
           describe: name => this.describe(name),
@@ -79,13 +80,13 @@ export class RoutineService {
           },
         };
         try {
-          const result = await replay(routine, args.inputs || {}, adapter, { signal: fused, approve, onEvent: event => this.events.push(event) });
+          const result = await replay(routine, args.inputs || {}, adapter, { signal, approve, onEvent: event => this.events.push(event) });
           this.runState = 'complete'; this.lastResult = result; return result;
-        } catch (error) { this.runState = fused.aborted ? 'cancelled' : 'failed'; this.lastResult = { status: this.runState, error: safeError(error) }; throw error; }
-        finally { this.controller = undefined; }
+        } catch (error) { this.runState = signal.aborted ? 'cancelled' : 'failed'; this.lastResult = { status: this.runState, error: safeError(error) }; throw error; }
       }
       fail('ACTION', 'Unknown action.');
-    } finally { this.busy = false; }
+    } catch (error) { checkAbort(signal); throw error; }
+    finally { this.controller = undefined; this.busy = false; }
   }
   async close() { this.controller?.abort(); this.recorder.discard(); this.lastResult = null; await this.browser.close(); }
 }

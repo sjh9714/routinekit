@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { Recorder, replay, fingerprint, validateRoutine, jsonCopy, assertNoSecrets, getPath } from '../src/core.mjs';
+import { Recorder, replay, fingerprint, validateRoutine, validateSchema, jsonCopy, assertNoSecrets, getPath, LIMITS } from '../src/core.mjs';
 
 const search = { name: 'search', inputSchema: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'], additionalProperties: false }, effect: 'read' };
 const open = { name: 'open', inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'], additionalProperties: false }, effect: 'read' };
@@ -67,4 +67,22 @@ test('cancellation during a step prevents the next step', async () => {
 });
 test('run approval cannot mutate the reviewed plan', async () => {
   const a = adapter(); await replay(recording().draft(), { query: 'x' }, a, { approve: async request => { request.routine.steps[0].tool = 'evil'; request.inputs.query = 'evil'; return true; } }); assert.equal(a.calls[0][0], 'search'); assert.equal(a.calls[0][1].query, 'x');
+});
+
+test('schema keywords are checked without confusing ordinary property names', () => {
+  validateSchema({ type: 'object', properties: { format: { type: 'string' } }, required: ['format'] }, { format: 'png' });
+  for (const schema of [
+    { type: 'array', items: [{ type: 'string', pattern: 'a+' }] },
+    { type: 'object', dependencies: { value: { properties: { value: { type: 'string', format: 'email' } } } } },
+    { type: 'array', minContains: 2 },
+  ]) assert.throws(() => validateSchema(schema, []), { code: 'UNSUPPORTED_SCHEMA' });
+});
+
+test('capture expires without status polling and late results cannot revive it', t => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+  const recorder = recording(); const token = recorder.start('open');
+  t.mock.timers.tick(LIMITS.ttl);
+  recorder.finish(token, 'open', { id: 'late-id' }, { opened: true });
+  assert.equal(recorder.status().state, 'idle');
+  assert.throws(() => recorder.draft(), { code: 'RECORDING' });
 });
